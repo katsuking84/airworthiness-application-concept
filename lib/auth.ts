@@ -4,7 +4,8 @@ import { getChatGPTUser } from '@/app/chatgpt-auth';
 
 const COOKIE = 'airworthy_session';
 const SESSION_DAYS = 30;
-const ITERATIONS = 210_000;
+// Cloudflare Workers currently caps PBKDF2 at 100,000 iterations.
+const ITERATIONS = 100_000;
 
 type AuthDB = { DB: D1Database };
 type LocalUserRow = { id:string; email:string; name:string; password_hash:string; password_salt:string };
