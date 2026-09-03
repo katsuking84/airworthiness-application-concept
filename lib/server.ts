@@ -1,14 +1,15 @@
 import { env } from 'cloudflare:workers';
-import { getChatGPTUser } from '@/app/chatgpt-auth';
+import { currentUser } from './auth';
 import { initialData, type ApplicationData, type DocumentRecord } from './application';
 export const runtime=()=>env as unknown as { DB:D1Database; FILES:R2Bucket };
 export class ApiError extends Error { constructor(message:string,public status=400){super(message);} }
+export function verifyMutationOrigin(request:Request){
+ const origin=request.headers.get('origin');
+ if((origin&&origin!==new URL(request.url).origin)||request.headers.get('sec-fetch-site')==='cross-site')throw new ApiError('This request could not be verified.',403);
+}
 export async function identity(request?:Request){
- const user=await getChatGPTUser();if(!user)throw new ApiError('Please sign in to continue.',401);
- if(request&&request.method!=='GET'){
-  const origin=request.headers.get('origin');
-  if((origin&&origin!==new URL(request.url).origin)||request.headers.get('sec-fetch-site')==='cross-site')throw new ApiError('This request could not be verified.',403);
- }
+ const user=await currentUser(request);if(!user)throw new ApiError('Please sign in to continue.',401);
+ if(request&&request.method!=='GET')verifyMutationOrigin(request);
  return user;
 }
 export function response(data:unknown,status=200){return Response.json(data,{status,headers:{'Cache-Control':'no-store'}});}
