@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { currentUser } from './auth';
 import { initialData, type ApplicationData, type DocumentRecord } from './application';
-export const runtime=()=>env as unknown as { DB:D1Database; FILES:R2Bucket };
+export const runtime=()=>env as unknown as { DB:D1Database; FILES:R2Bucket; REGISTRY_SYNC_TOKEN?:string };
 export class ApiError extends Error { constructor(message:string,public status=400){super(message);} }
 export function verifyMutationOrigin(request:Request){
  const origin=request.headers.get('origin');
@@ -36,3 +36,15 @@ export type AppRow={id:string;owner:string;data:string;step:number;status:string
 export async function ownedApplication(id:string,owner:string,editable=false){const row=await runtime().DB.prepare('SELECT * FROM applications WHERE id = ? AND owner = ?').bind(id,owner).first<AppRow>();if(!row)throw new ApiError('Application not found.',404);if(editable&&row.status!=='draft')throw new ApiError('This concept application was submitted and is read-only.',409);return row;}
 export async function documentList(id:string):Promise<DocumentRecord[]>{const {results}=await runtime().DB.prepare('SELECT id, requirement_id AS requirementId, name, size, uploaded_at AS uploadedAt FROM documents WHERE application_id = ? ORDER BY uploaded_at').bind(id).all<DocumentRecord>();return results;}
 export function appRecord(row:AppRow){return {id:row.id,data:JSON.parse(row.data),step:row.step,status:row.status,updatedAt:row.updated_at,submittedAt:row.submitted_at,receipt:row.receipt};}
+
+function equalSecret(a:string,b:string){
+ if(a.length!==b.length)return false;let difference=0;
+ for(let i=0;i<a.length;i++)difference|=a.charCodeAt(i)^b.charCodeAt(i);
+ return difference===0;
+}
+export function requireRegistrySync(request:Request){
+ const configured=runtime().REGISTRY_SYNC_TOKEN;
+ const authorization=request.headers.get('authorization')||'';
+ const supplied=authorization.startsWith('Bearer ')?authorization.slice(7):'';
+ if(!configured||!supplied||!equalSecret(configured,supplied))throw new ApiError('Registry synchronization is not authorized.',401);
+}

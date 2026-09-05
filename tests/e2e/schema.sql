@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS applications (id text PRIMARY KEY NOT NULL, owner text NOT NULL, data text NOT NULL, step integer DEFAULT 0 NOT NULL, status text DEFAULT 'draft' NOT NULL, created_at text NOT NULL, updated_at text NOT NULL, submitted_at text, receipt text);
+CREATE INDEX IF NOT EXISTS idx_applications_owner_created ON applications (owner,created_at);
+CREATE TABLE IF NOT EXISTS documents (id text PRIMARY KEY NOT NULL, application_id text NOT NULL, requirement_id text NOT NULL, name text NOT NULL, size integer NOT NULL, mime text NOT NULL, object_key text NOT NULL, uploaded_at text NOT NULL, FOREIGN KEY (application_id) REFERENCES applications(id));
+CREATE INDEX IF NOT EXISTS idx_documents_application ON documents (application_id);
+CREATE TABLE IF NOT EXISTS document_uploads (id text PRIMARY KEY NOT NULL, application_id text NOT NULL, requirement_id text NOT NULL, name text NOT NULL, expected_size integer NOT NULL, part_count integer NOT NULL, created_at text NOT NULL, FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE);
+CREATE INDEX IF NOT EXISTS idx_document_uploads_application ON document_uploads (application_id);
+CREATE TABLE IF NOT EXISTS users (id text PRIMARY KEY NOT NULL, email text NOT NULL UNIQUE, name text NOT NULL, password_hash text NOT NULL, password_salt text NOT NULL, password_algorithm text DEFAULT 'pbkdf2-sha256-100000' NOT NULL, created_at text NOT NULL);
+CREATE TABLE IF NOT EXISTS sessions (id text PRIMARY KEY NOT NULL, user_id text NOT NULL, token_hash text NOT NULL UNIQUE, expires_at text NOT NULL, created_at text NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions (token_hash);
+CREATE TABLE IF NOT EXISTS auth_attempts (key text PRIMARY KEY NOT NULL, attempts integer NOT NULL, window_started_at text NOT NULL);

@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Airworthy | Airworthiness Application Workspace',
   description: 'A guided concept for FAA Form 8130-6 applications, supporting documents, and review.',
+  icons: { icon: '/favicon.svg' },
 };
 
 export default function RootLayout({

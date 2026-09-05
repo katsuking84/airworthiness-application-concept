@@ -1,0 +1,28 @@
+name: Sync FAA registry
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: faa-registry-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download, remove personal data, and publish
+        env:
+          REGISTRY_SYNC_TOKEN: ${{ secrets.REGISTRY_SYNC_TOKEN }}
+          SITE_BASE_URL: https://airworthiness-application-concept.katsuking84.chatgpt.site
+        run: python scripts/sync_faa_registry.py

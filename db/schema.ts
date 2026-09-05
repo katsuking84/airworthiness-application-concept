@@ -10,9 +10,17 @@ export const documents=sqliteTable('documents',{
  requirementId:text('requirement_id').notNull(),name:text('name').notNull(),size:integer('size').notNull(),
  mime:text('mime').notNull(),objectKey:text('object_key').notNull(),uploadedAt:text('uploaded_at').notNull(),
 },table=>[index('idx_documents_application').on(table.applicationId)]);
+export const documentUploads=sqliteTable('document_uploads',{
+ id:text('id').primaryKey(),applicationId:text('application_id').notNull().references(()=>applications.id,{onDelete:'cascade'}),
+ requirementId:text('requirement_id').notNull(),name:text('name').notNull(),expectedSize:integer('expected_size').notNull(),
+ partCount:integer('part_count').notNull(),createdAt:text('created_at').notNull(),
+},table=>[index('idx_document_uploads_application').on(table.applicationId)]);
 export const users=sqliteTable('users',{
  id:text('id').primaryKey(),email:text('email').notNull().unique(),name:text('name').notNull(),
- passwordHash:text('password_hash').notNull(),passwordSalt:text('password_salt').notNull(),createdAt:text('created_at').notNull(),
+ passwordHash:text('password_hash').notNull(),passwordSalt:text('password_salt').notNull(),passwordAlgorithm:text('password_algorithm').notNull().default('pbkdf2-sha256-100000'),createdAt:text('created_at').notNull(),
+});
+export const authAttempts=sqliteTable('auth_attempts',{
+ key:text('key').primaryKey(),attempts:integer('attempts').notNull(),windowStartedAt:text('window_started_at').notNull(),
 });
 export const sessions=sqliteTable('sessions',{
  id:text('id').primaryKey(),userId:text('user_id').notNull().references(()=>users.id,{onDelete:'cascade'}),

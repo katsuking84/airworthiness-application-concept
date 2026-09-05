@@ -6,6 +6,8 @@ const COOKIE = 'airworthy_session';
 const SESSION_DAYS = 30;
 // Cloudflare Workers currently caps PBKDF2 at 100,000 iterations.
 const ITERATIONS = 100_000;
+const ATTEMPT_WINDOW_MS = 15*60*1000;
+const MAX_AUTH_FAILURES = 6;
 
 type AuthDB = { DB: D1Database };
 type LocalUserRow = { id:string; email:string; name:string; password_hash:string; password_salt:string };
@@ -58,6 +60,22 @@ export function validateAccountInput(value:unknown,creating:boolean){
   if(creating&&(name.length<2||name.length>80))throw new Error('Enter your name.');
   return {email,password,name};
 }
+async function authAttemptKey(request:Request,email:string){
+ const forwarded=request.headers.get('cf-connecting-ip')||request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()||'unknown';
+ return sha256(`${normalizeEmail(email)}\n${forwarded}`);
+}
+export async function assertAuthAllowed(request:Request,email:string){
+ const key=await authAttemptKey(request,email),row=await db().prepare('SELECT attempts, window_started_at FROM auth_attempts WHERE key = ?').bind(key).first<{attempts:number;window_started_at:string}>();
+ if(!row)return key;
+ if(Date.now()-Date.parse(row.window_started_at)>=ATTEMPT_WINDOW_MS){await db().prepare('DELETE FROM auth_attempts WHERE key = ?').bind(key).run();return key;}
+ if(row.attempts>=MAX_AUTH_FAILURES)throw new Error('Too many account attempts. Wait 15 minutes and try again.');
+ return key;
+}
+export async function recordAuthFailure(key:string){
+ const now=new Date().toISOString(),cutoff=new Date(Date.now()-ATTEMPT_WINDOW_MS).toISOString();
+ await db().prepare('INSERT INTO auth_attempts (key, attempts, window_started_at) VALUES (?, 1, ?) ON CONFLICT(key) DO UPDATE SET attempts = CASE WHEN window_started_at < ? THEN 1 ELSE attempts + 1 END, window_started_at = CASE WHEN window_started_at < ? THEN excluded.window_started_at ELSE window_started_at END').bind(key,now,cutoff,cutoff).run();
+}
+export async function clearAuthAttempts(key:string){await db().prepare('DELETE FROM auth_attempts WHERE key = ?').bind(key).run();}
 async function createSession(userId:string){
   const token=randomToken(),tokenHash=await sha256(token),now=new Date(),expires=new Date(now.getTime()+SESSION_DAYS*86400000);
   await db().prepare('INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(),userId,tokenHash,expires.toISOString(),now.toISOString()).run();
@@ -67,7 +85,7 @@ export async function createAccount(input:{email:string;password:string;name:str
   const existing=await db().prepare('SELECT id FROM users WHERE email = ?').bind(input.email).first();
   if(existing)throw new Error('An account already exists for this email address.');
   const id=crypto.randomUUID(),salt=randomToken(24),hash=await passwordHash(input.password,salt),now=new Date().toISOString();
-  await db().prepare('INSERT INTO users (id, email, name, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(id,input.email,input.name,hash,salt,now).run();
+  await db().prepare('INSERT INTO users (id, email, name, password_hash, password_salt, password_algorithm, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id,input.email,input.name,hash,salt,'pbkdf2-sha256-100000',now).run();
   return {token:await createSession(id),user:{userId:`local:${id}`,displayName:input.name,email:input.email,provider:'email' as const}};
 }
 export async function signInAccount(input:{email:string;password:string}){
